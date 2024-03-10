@@ -3,6 +3,8 @@ import { Koa } from "@discordx/koa";
 import type { Interaction, Message } from "discord.js";
 import { IntentsBitField } from "discord.js";
 import { Client } from "discordx";
+import dotenv from "dotenv";
+dotenv.config();
 
 export const bot = new Client({
   // To use only guild command

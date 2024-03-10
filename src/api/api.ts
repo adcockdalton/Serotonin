@@ -23,7 +23,7 @@ export class API {
   @Get("/webhook")
   subscribe(context: Context): void {
     console.log("webhook get request received!", context.query);
-    const VERIFY_TOKEN = "aowiubfoq9w283gr97qbfaoilsvydfalwfb93ba";
+    const VERIFY_TOKEN = String(process.env.STRAVA_VERIFY_TOKEN);
     // Parses the query params
     let mode = context.query['hub.mode'];
     let token = context.query['hub.verify_token'];

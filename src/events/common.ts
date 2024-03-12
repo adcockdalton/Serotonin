@@ -25,6 +25,15 @@ export class Example {
         console.log("Message Deleted", client.user?.username, message.content);
     }
 
+    @On()
+    ping(pingArgs: [string, string], client: Client): void {
+        console.log("Ping Event received", pingArgs[0]);
+        const channel = client.guilds.cache
+            .get(pingArgs[0])
+            ?.channels.cache.get(pingArgs[1]) as TextChannel;
+        channel?.send("Pong from the internet!").catch(console.error);
+    }
+
     private async getTether(): Promise<string> {
         return new Promise((resolve, reject) => {
             fs.readFile(pathToStravaConfig, "utf8", (err, data) => {
@@ -50,7 +59,6 @@ export class Example {
         client: Client
     ): Promise<void> {
         console.log("Strava Event", confirmation[0]);
-
         try {
             const tether = await this.getTether();
             const eventDate = new Date(confirmation[0].event_time * 1000);

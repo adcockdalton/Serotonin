@@ -49,11 +49,21 @@ bot.once("ready", async () => {
 });
 
 bot.on("interactionCreate", (interaction: Interaction) => {
-    bot.executeInteraction(interaction);
+    try {
+        bot.executeInteraction(interaction);
+    } catch (e) {
+        console.log("Error in interactionCreate event");
+        console.error(e);
+    }
 });
 
 bot.on("messageCreate", async (message: Message) => {
-    await bot.executeCommand(message);
+    try {
+        bot.executeCommand(message);
+    } catch (e) {
+        console.log("Error in messageCreate event");
+        console.error(e);
+    }
 });
 
 async function run() {

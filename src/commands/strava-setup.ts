@@ -28,15 +28,49 @@ export class Example {
         name: "strava-tether",
     })
     async slashStravaTether(command: CommandInteraction): Promise<void> {
-        await this.writeTether(command.channelId);
-        await command.reply("Strava integration tethered to this channel");
+        try {
+            await this.writeTether(command.channelId);
+            await command.reply("Strava integration tethered to this channel");
+        } catch (e) {
+            console.log("Failed to tether Strava to this channel");
+            await command.reply("Failed to tether Strava to this channel");
+        }
+    }
+
+    @Slash({
+        description:
+            "Test that the bot is awake by asking it to send a message",
+        name: "ping",
+    })
+    async slashPing(command: CommandInteraction): Promise<void> {
+        await command.reply("Pong!");
+    }
+
+    @Slash({
+        description: "Get current public tunnel URL",
+        name: "get-url",
+    })
+    async slashGetUrl(command: CommandInteraction): Promise<void> {
+        try {
+            const url = await this.getNgrokUrl();
+            await command.reply(`[Public URL](${url})`);
+        } catch (e) {
+            console.log("Failed to get ngrok url");
+            await command.reply("Failed to get public url");
+        }
     }
 
     private async stravaSetup(command: CommandInteraction): Promise<void> {
-        await this.confirmTether(command.channelId);
-        await this.deleteStravaSubscription();
-        await this.createStravaSubscription();
-        await command.reply("Strava integration setup complete");
+        // should only have to do this if ngrok is new. redo code flow?
+        try {
+            await this.confirmTether(command.channelId);
+            await this.deleteStravaSubscription();
+            await this.createStravaSubscription();
+            await command.reply("Strava integration setup complete");
+        } catch (e) {
+            console.log("Failed to setup Strava integration");
+            await command.reply("Failed to setup Strava integration");
+        }
     }
 
     private async writeTether(channelId: string): Promise<void> {

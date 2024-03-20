@@ -13,6 +13,15 @@ const __dirname = path.dirname(__filename);
 
 const pathToStravaConfig = path.resolve(__dirname, "../../stravaconfig.json");
 
+type subscription = {
+    id: number;
+    resource_state: number;
+    application_id: number;
+    callback_url: string;
+    created_at: string;
+    updated_at: string;
+};
+
 @Discord()
 export class Example {
     @Slash({
@@ -24,26 +33,35 @@ export class Example {
     }
 
     @Slash({
-        description: "Move the Strava integration into the current channel",
-        name: "strava-tether",
-    })
-    async slashStravaTether(command: CommandInteraction): Promise<void> {
-        try {
-            await this.writeTether(command.channelId);
-            await command.reply("Strava integration tethered to this channel");
-        } catch (e) {
-            console.log("Failed to tether Strava to this channel");
-            await command.reply("Failed to tether Strava to this channel");
-        }
-    }
-
-    @Slash({
         description:
             "Test that the bot is awake by asking it to send a message",
         name: "ping",
     })
     async slashPing(command: CommandInteraction): Promise<void> {
         await command.reply("Pong!");
+    }
+
+    private async stravaSetup(command: CommandInteraction): Promise<void> {
+        try {
+            await this.writeTether(
+                this.validateGuildId(command.guildId),
+                command.channelId
+            );
+            if (await this.linksMatch()) {
+                await command.reply(
+                    "Strava integration tethered to this channel!"
+                );
+                return;
+            }
+            await this.deleteStravaSubscription();
+            await this.createStravaSubscription();
+            await command.reply(
+                "Strava integration setup complete! Tethered to this channel."
+            );
+        } catch (e) {
+            console.log("Failed to setup Strava integration");
+            await command.reply("Failed to setup Strava integration");
+        }
     }
 
     @Slash({
@@ -53,28 +71,32 @@ export class Example {
     async slashGetUrl(command: CommandInteraction): Promise<void> {
         try {
             const url = await this.getNgrokUrl();
-            await command.reply(`[Public URL](${url})`);
+            await command.reply(
+                `[Serotonin's current public link!](${url}) (as of this message)`
+            );
         } catch (e) {
             console.log("Failed to get ngrok url");
             await command.reply("Failed to get public url");
         }
     }
 
-    private async stravaSetup(command: CommandInteraction): Promise<void> {
-        // should only have to do this if ngrok is new. redo code flow?
-        try {
-            await this.confirmTether(command.channelId);
-            await this.deleteStravaSubscription();
-            await this.createStravaSubscription();
-            await command.reply("Strava integration setup complete");
-        } catch (e) {
-            console.log("Failed to setup Strava integration");
-            await command.reply("Failed to setup Strava integration");
+    private validateGuildId(guildId: string | null): string {
+        if (guildId === null) {
+            console.log(
+                "GuildID not found in slash command. User likely in DM.",
+                guildId
+            );
+            throw new Error(
+                "GuildID not found in slash command. User likely in DM."
+            );
         }
+        return guildId;
     }
 
-    private async writeTether(channelId: string): Promise<void> {
-        // decentralize this?
+    private async writeTether(
+        guildId: string,
+        channelId: string
+    ): Promise<void> {
         fs.readFile(pathToStravaConfig, "utf8", (err, data) => {
             if (err) {
                 console.log("Failed to read stravaconfig.json");
@@ -82,16 +104,37 @@ export class Example {
             }
             try {
                 const stravaConfig = JSON.parse(data);
-                stravaConfig.tether = channelId;
+
+                let guildFound = false;
+
+                for (const tether of stravaConfig.tethers) {
+                    if (tether.guildId === guildId) {
+                        if (tether.channelId === channelId) {
+                            return;
+                        } else {
+                            guildFound = true;
+                            tether.channelId = channelId;
+                        }
+                    }
+                }
+
+                if (!guildFound) {
+                    stravaConfig.tethers.push({
+                        guildId: guildId,
+                        channelId: channelId,
+                    });
+                }
 
                 fs.writeFile(
                     pathToStravaConfig,
                     JSON.stringify(stravaConfig, null, 4),
                     (err) => {
                         if (err) {
-                            console.log("Failed to write to stravaconfig.json");
+                            console.log(
+                                "Failed to write tether to stravaconfig.json"
+                            );
                             throw new Error(
-                                "Failed to write to stravaconfig.json"
+                                "Failed to write tether to stravaconfig.json"
                             );
                         }
                     }
@@ -103,41 +146,7 @@ export class Example {
         });
     }
 
-    private async confirmTether(channelId: string): Promise<void> {
-        // combine with writeTether?
-        fs.readFile(pathToStravaConfig, "utf8", (err, data) => {
-            if (err) {
-                console.log("Failed to read stravaconfig.json");
-                throw new Error("Failed to read stravaconfig.json");
-            }
-            try {
-                const stravaConfig = JSON.parse(data);
-                if (stravaConfig.tether === "") {
-                    stravaConfig.tether = channelId;
-
-                    fs.writeFile(
-                        pathToStravaConfig,
-                        JSON.stringify(stravaConfig, null, 4),
-                        (err) => {
-                            if (err) {
-                                console.log(
-                                    "Failed to write to stravaconfig.json"
-                                );
-                                throw new Error(
-                                    "Failed to write to stravaconfig.json"
-                                );
-                            }
-                        }
-                    );
-                }
-            } catch (e) {
-                console.log("Failed to parse stravaconfig.json");
-                throw new Error("Failed to parse stravaconfig.json");
-            }
-        });
-    }
-
-    private async getClientId(): Promise<string | undefined> {
+    private async getSubscription(): Promise<subscription> {
         const getIdUrl = new URL(stravaSubscriptionsUrl);
         const getApplicationIdParams = {
             client_secret: String(process.env.STRAVA_CLIENT_SECRET),
@@ -151,14 +160,43 @@ export class Example {
             method: "GET",
         });
         if (!response.ok) {
-            console.log("Failed to receive application id from Strava");
+            console.log("Failed to receive subscription from Strava");
             throw new Error(
-                "Network response to strava-setup.ts::getApplicationId was not ok"
+                "Network response to fetch subscription was not ok"
             );
         }
+
         const data = await response.json();
-        console.log("client id data", data);
-        return data.length ? String(data[0].id) : undefined;
+        if (data.errors !== undefined) {
+            console.log(
+                "Fetched subscription from Strava, but errors were present",
+                data.errors
+            );
+            throw new Error("Data from fetch subscription was not ok");
+        }
+
+        const subscription: subscription = data[0];
+        return subscription;
+    }
+
+    private async linksMatch(): Promise<boolean> {
+        let ngrokUrl: string;
+        let subscriptionUrl: string;
+
+        try {
+            ngrokUrl = (await this.getNgrokUrl()) + "/webhook";
+            subscriptionUrl = (await this.getSubscription()).callback_url;
+        } catch (e) {
+            console.log("Failed to compare ngrok and subscription urls");
+            return false;
+        }
+
+        return ngrokUrl === subscriptionUrl;
+    }
+
+    private async getClientId(): Promise<string> {
+        const subscription: subscription = await this.getSubscription();
+        return String(subscription.id);
     }
 
     private async deleteStravaSubscription(): Promise<void> {
@@ -169,6 +207,7 @@ export class Example {
             );
             return;
         }
+
         const deleteParams = {
             client_secret: String(process.env.STRAVA_CLIENT_SECRET),
             client_id: String(process.env.STRAVA_CLIENT_ID),
@@ -212,7 +251,7 @@ export class Example {
                 if (!response.ok) {
                     throw new Error("Network response was not ok");
                 }
-                return response.json(); // Assuming response is JSON
+                return response.json();
             })
             .catch((error) => {
                 console.error(

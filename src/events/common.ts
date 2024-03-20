@@ -18,6 +18,11 @@ type StravaEvent = {
     event_time: number;
 };
 
+type tether = {
+    guildId: string;
+    channelId: string;
+};
+
 @Discord()
 export class Example {
     @On()
@@ -34,7 +39,7 @@ export class Example {
         channel?.send("Pong from the internet!").catch(console.error);
     }
 
-    private async getTether(): Promise<string> {
+    private async getTethers(): Promise<tether[]> {
         return new Promise((resolve, reject) => {
             fs.readFile(pathToStravaConfig, "utf8", (err, data) => {
                 if (err) {
@@ -44,13 +49,13 @@ export class Example {
                 }
                 try {
                     const stravaConfig = JSON.parse(data);
-                    resolve(stravaConfig.tether);
+                    resolve(stravaConfig.tethers);
                 } catch (e) {
                     console.log("Failed to parse stravaconfig.json");
                     reject(new Error("Failed to parse stravaconfig.json"));
                 }
             });
-        });
+        }) as Promise<tether[]>;
     }
 
     @On()
@@ -58,18 +63,41 @@ export class Example {
         confirmation: [StravaEvent],
         client: Client
     ): Promise<void> {
-        console.log("Strava Event", confirmation[0]);
+        const event: StravaEvent = confirmation[0];
+        console.log("Strava Event", event);
+
         try {
-            const tether = await this.getTether();
-            const eventDate = new Date(confirmation[0].event_time * 1000);
-            const formattedDate = eventDate.toLocaleString();
-            (client.channels.cache.get(tether) as TextChannel).send(
-                "Strava event received! Someone did something on " +
-                    formattedDate
-            );
-            console.log("Tether:", tether);
+            const parsedMessage = this.parseWebhookEvent(event);
+
+            const tethers = (await this.getTethers()) as tether[];
+            tethers.forEach((tether) => {
+                const guild = client.guilds.cache.get(tether.guildId);
+                if (guild) {
+                    const channel = guild.channels.cache.get(
+                        tether.channelId
+                    ) as TextChannel;
+                    if (channel) {
+                        channel.send(parsedMessage);
+                        console.log("Webhook event sent to", tether);
+                    }
+                }
+            });
         } catch (error) {
             console.error("An error occurred:", error);
+        }
+    }
+
+    private parseWebhookEvent(event: StravaEvent): string {
+        console.log("Strava Event", event);
+        const eventDate = new Date(event.event_time * 1000);
+        const formattedDate = eventDate.toLocaleTimeString();
+        if (
+            event.object_type === "activity" &&
+            event.aspect_type === "create"
+        ) {
+            return `OMG!! At ${formattedDate} today, someone finished an activity on Strava! Check it out [here!](https://www.strava.com/activities/${event.object_id})`;
+        } else {
+            return `An event occurred on Strava! Someone's interacting with Strava, but it's not a new activity.`;
         }
     }
 }

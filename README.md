@@ -1,8 +1,10 @@
 # Serotonin
 
+This project is currently on hold.
+
 ## Description
 
-This Discord bot is intended for use on my personal Discord server "Braincell Hell." It is not useful for anything else at the moment.
+A Discord bot for interaction with the Strava API.
 
 ## Tech
 

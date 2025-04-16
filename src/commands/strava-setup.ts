@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 const stravaSubscriptionsUrl =
     "https://www.strava.com/api/v3/push_subscriptions";
 const ngrokAPIUrl = "https://api.ngrok.com/endpoints";
+const domainName = "https://stickerchart.org";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -262,6 +263,10 @@ export class Example {
     }
 
     private async getNgrokUrl(): Promise<string> {
+
+        return domainName;
+
+
         const ngrokUrl = new URL(ngrokAPIUrl);
         const response = await fetch(ngrokUrl, {
             method: "GET",
